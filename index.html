@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Murder Mittens - Accurate Model</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #ffc0cb; cursor: none; font-family: sans-serif; }
+        #overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #ffc0cb; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 5000;
+        }
+        #start-btn {
+            padding: 15px 40px; font-size: 22px; background: white;
+            color: #ff69b4; border: 3px solid #ff69b4; border-radius: 30px; cursor: pointer;
+            font-weight: bold;
+        }
+        #hud {
+            position: absolute; top: 20px; left: 20px; color: #ff69b4;
+            background: white; padding: 15px; border-radius: 15px;
+            pointer-events: none; display: none; border: 2px solid #ff69b4;
+        }
+        #crosshair {
+            position: absolute; width: 12px; height: 12px;
+            pointer-events: none; z-index: 1000; transform: translate(-50%, -50%);
+            display: none;
+        }
+        #crosshair::before { content: ''; position: absolute; top: 5px; left: 0; width: 12px; height: 2px; background: #ff0000; }
+        #crosshair::after { content: ''; position: absolute; left: 5px; top: 0; width: 2px; height: 12px; background: #ff0000; }
+        #cd-bar { width: 100px; height: 6px; background: #eee; border-radius: 3px; margin-top: 10px; overflow: hidden;}
+        #cd-fill { width: 100%; height: 100%; background: #ff69b4; }
+    </style>
+    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+</head>
+<body>
+
+    <div id="overlay">
+        <h1 style="color: white; text-shadow: 2px 2px #ff69b4;">MURDER MITTENS</h1>
+        <button id="start-btn">START GAME</button>
+    </div>
+
+    <div id="crosshair"></div>
+    <div id="hud">
+        KILLS: <span id="scoreText">0</span>
+        <div id="cd-bar"><div id="cd-fill"></div></div>
+    </div>
+
+<script>
+    const startBtn = document.getElementById('start-btn');
+    startBtn.onclick = () => {
+        document.getElementById('overlay').style.display = 'none';
+        document.getElementById('hud').style.display = 'block';
+        document.getElementById('crosshair').style.display = 'block';
+        initGame();
+    };
+
+    function initGame() {
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xdcdcdc); // Matches the grey-tiled wall vibe
+        scene.fog = new THREE.Fog(0xdcdcdc, 20, 100);
+
+        const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+        const sun = new THREE.DirectionalLight(0xffffff, 0.5);
+        sun.position.set(10, 20, 10);
+        scene.add(sun);
+
+        // Floor - Darker Tiled look
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshStandardMaterial({ color: 0x2c3e50 }));
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+        const grid = new THREE.GridHelper(1000, 100, 0x444444, 0x444444);
+        scene.add(grid);
+
+        // --- THE ACCURATE CAT MODEL ---
+        const player = new THREE.Group();
+        const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+        const pinkMat = new THREE.MeshStandardMaterial({ color: 0xffb6c1 });
+        const blackMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
+
+        // Body (Smooth Capsule)
+        const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.8, 10, 20), whiteMat);
+        body.rotation.x = Math.PI / 2;
+        body.position.y = 0.6;
+        player.add(body);
+
+        // Head (Rounded)
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.38, 32, 32), whiteMat);
+        head.position.set(0, 1.0, 0.6);
+        player.add(head);
+
+        // Eyes (Large Black Pearls)
+        const eyeGeo = new THREE.SphereGeometry(0.06, 16, 16);
+        const leftEye = new THREE.Mesh(eyeGeo, blackMat);
+        leftEye.position.set(0.18, 1.05, 0.9);
+        player.add(leftEye);
+        const rightEye = leftEye.clone();
+        rightEye.position.x = -0.18;
+        player.add(rightEye);
+
+        // Nose (Tiny Pink)
+        const nose = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), pinkMat);
+        nose.position.set(0, 0.95, 0.95);
+        player.add(nose);
+
+        // Ears (Pointy with Pink Inside)
+        function createEar(isLeft) {
+            const ear = new THREE.Group();
+            const outer = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.3, 16), whiteMat);
+            const inner = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.2, 16), pinkMat);
+            inner.position.z = 0.03;
+            ear.add(outer);
+            ear.add(inner);
+            ear.position.set(isLeft ? 0.2 : -0.2, 1.35, 0.6);
+            return ear;
+        }
+        player.add(createEar(true));
+        player.add(createEar(false));
+
+        // Knife in Mouth
+        const knife = new THREE.Group();
+        knife.position.set(0, 0.85, 0.9);
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.7), new THREE.MeshStandardMaterial({color: 0xcccccc, metalness: 0.8}));
+        knife.add(blade);
+        player.add(knife);
+
+        // Legs (4 Smooth Legs)
+        const legs = [];
+        const legGeo = new THREE.CapsuleGeometry(0.08, 0.4, 8, 8);
+        const legPos = [{x:0.2, z:0.4}, {x:-0.2, z:0.4}, {x:0.2, z:-0.4}, {x:-0.2, z:-0.4}];
+        legPos.forEach(p => {
+            const leg = new THREE.Mesh(legGeo, whiteMat);
+            leg.position.set(p.x, 0.3, p.z);
+            player.add(leg);
+            legs.push(leg);
+        });
+
+        // Tail
+        const tail = new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 0.6, 8, 8), whiteMat);
+        tail.position.set(0, 0.7, -0.6);
+        tail.rotation.x = -Math.PI/3;
+        player.add(tail);
+
+        scene.add(player);
+
+        // --- LOGIC ---
+        let score = 0, isGameOver = false, velY = 0, isJump = false, cd = 0;
+        let camH = 0, camV = 0.6, isR = false, isCharge = false, startT = 0;
+        const keys = {}, enemies = [], knifes = [];
+        const mouse = new THREE.Vector2(), ray = new THREE.Raycaster();
+
+        window.onkeydown = e => keys[e.code] = true;
+        window.onkeyup = e => keys[e.code] = false;
+        window.onmousemove = e => {
+            document.getElementById('crosshair').style.left = e.clientX + 'px';
+            document.getElementById('crosshair').style.top = e.clientY + 'px';
+            mouse.x = (e.clientX/window.innerWidth)*2-1;
+            mouse.y = -(e.clientY/window.innerHeight)*2+1;
+            if(isR) camH -= e.movementX*0.006, camV = Math.max(0.1, Math.min(1.4, camV + e.movementY*0.006));
+        };
+        window.onmousedown = e => { if(e.button===2) isR=true; if(e.button===0) {isCharge=true; startT=Date.now();} };
+        window.onmouseup = e => { if(e.button===2) isR=false; if(e.button===0 && isCharge) { isCharge=false; (Date.now()-startT<200) ? swipe() : throwK(); } };
+        window.oncontextmenu = e => e.preventDefault();
+
+        function swipe() {
+            player.rotation.y += 0.4; setTimeout(()=>player.rotation.y-=0.4, 100);
+            enemies.forEach((en, i) => { if(player.position.distanceTo(en.position) < 3) kill(en, i); });
+        }
+        function throwK() {
+            if(cd > 0) return;
+            ray.setFromCamera(mouse, camera);
+            const hit = ray.intersectObject(floor);
+            if(hit.length > 0) {
+                const k = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.7), new THREE.MeshStandardMaterial({color: 0xffffff}));
+                k.position.copy(player.position).add(new THREE.Vector3(0,0.8,0.5));
+                const dir = new THREE.Vector3().subVectors(hit[0].point, k.position).normalize();
+                knifes.push({m:k, d:dir, l:100}); scene.add(k);
+                cd = 120; knife.visible = false;
+            }
+        }
+        function kill(en, i) { scene.remove(en); enemies.splice(i, 1); score++; document.getElementById('scoreText').innerText = score; }
+
+        setInterval(() => {
+            if(isGameOver) return;
+            const e = new THREE.Mesh(new THREE.SphereGeometry(0.5), new THREE.MeshStandardMaterial({color: 0xff0000}));
+            const a = Math.random()*Math.PI*2;
+            e.position.set(player.position.x+Math.cos(a)*30, 0.5, player.position.z+Math.sin(a)*30);
+            enemies.push(e); scene.add(e);
+        }, 2000);
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if(isGameOver) return;
+            
+            const sprint = keys['ShiftLeft'] || keys['ShiftRight'];
+            const speed = sprint ? 0.3 : 0.15;
+            const m = new THREE.Vector3();
+            if(keys['KeyW']) m.z += 1; if(keys['KeyS']) m.z -= 1;
+            if(keys['KeyA']) m.x += 1; if(keys['KeyD']) m.x -= 1;
+            
+            if(m.length() > 0) {
+                m.normalize().applyAxisAngle(new THREE.Vector3(0,1,0), camH);
+                player.position.add(m.multiplyScalar(speed));
+                player.rotation.y = THREE.MathUtils.lerp(player.rotation.y, Math.atan2(m.x, m.z), 0.1);
+                // Leg Animation
+                const t = Date.now() * (sprint ? 0.015 : 0.01);
+                legs[0].position.y = 0.3 + Math.abs(Math.sin(t))*0.2;
+                legs[1].position.y = 0.3 + Math.abs(Math.cos(t))*0.2;
+                legs[2].position.y = 0.3 + Math.abs(Math.cos(t))*0.2;
+                legs[3].position.y = 0.3 + Math.abs(Math.sin(t))*0.2;
+            }
+
+            if(keys['Space'] && !isJump) { velY = 0.22; isJump = true; }
+            if(isJump) { player.position.y += velY; velY -= 0.01; if(player.position.y <= 0) {player.position.y=0; isJump=false;} }
+
+            if(cd > 0) { cd--; document.getElementById('cd-fill').style.width = ((120-cd)/120*100) + "%"; }
+            else { knife.visible = true; }
+
+            knifes.forEach((k, i) => {
+                k.m.position.add(k.d.clone().multiplyScalar(0.8)); k.m.rotation.y += 0.4;
+                enemies.forEach((en, ei) => { if(k.m.position.distanceTo(en.position) < 1.2) {kill(en, ei); k.l=0;} });
+                if(--k.l <= 0) { scene.remove(k.m); knifes.splice(i, 1); }
+            });
+
+            enemies.forEach(en => {
+                en.position.add(new THREE.Vector3().subVectors(player.position, en.position).normalize().multiplyScalar(0.08));
+                if(player.position.distanceTo(en.position) < 1.1) isGameOver = true;
+            });
+
+            const d = 14;
+            camera.position.lerp(new THREE.Vector3(
+                player.position.x - Math.sin(camH)*Math.cos(camV)*d,
+                player.position.y + Math.sin(camV)*d + 2,
+                player.position.z - Math.cos(camH)*Math.cos(camV)*d
+            ), 0.1);
+            camera.lookAt(player.position.x, player.position.y+1, player.position.z);
+            renderer.render(scene, camera);
+        }
+        animate();
+    }
+</script>
+</body>
+</html>
