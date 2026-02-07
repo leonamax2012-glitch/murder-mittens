@@ -41,7 +41,23 @@
     // --- YOUR NEW CAT MODEL LOADER ---
     let player; 
     const loader = new THREE.GLTFLoader();
+   // --- YOUR NEW CAT MODEL LOADER ---
+    let player = new THREE.Group(); // Create a placeholder so the game doesn't crash
+    scene.add(player);
+
+    const loader = new THREE.GLTFLoader();
     loader.load('cat.glb', (gltf) => {
+        scene.remove(player); // Remove the placeholder
+        player = gltf.scene;
+        player.scale.set(1, 1, 1); 
+        scene.add(player);
+        console.log("Cat loaded successfully!");
+    }, undefined, (error) => {
+        console.error("Cat failed to load, using placeholder box instead.");
+        // Create a temporary box so you can at least play
+        const box = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshBasicMaterial({color: 0xffffff}));
+        player.add(box);
+    });'cat.glb', (gltf) => {
         player = gltf.scene;
         player.scale.set(1, 1, 1); // Adjust if your cat is too big/small
         scene.add(player);
